@@ -4,7 +4,7 @@
 
 ## Install to deploy contract
 
-- `cd contracts`
+### `cd contracts`
 
 ```
 npm install --save @truffle/hdwallet-provider
@@ -22,6 +22,6 @@ npm install --save @openzeppelin/contracts
 
 ## Contract Addresses
 
-- CRASH_TOKEN_ADDRESS: 
+- CRASH_TOKEN_ADDRESS:
 
-- BURN_TOKEN_ADDRESS: 
+- BURN_TOKEN_ADDRESS:
