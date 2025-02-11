@@ -22,6 +22,10 @@ npm install --save @openzeppelin/contracts
 
 ## Contract Addresses
 
-- CRASH_TOKEN_ADDRESS:
+- CRASH_CONTRACT_ADDRESS:
 
-- BURN_TOKEN_ADDRESS:
+- BURN_CONTRACT_ADDRESS:
+
+- POOL1_CONTRACT_ADDRESS:
+
+- POOL2_CONTRACT_ADDRESS:
