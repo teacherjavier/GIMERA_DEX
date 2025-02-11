@@ -1,80 +1,63 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-contract Pool2 is Ownable {
+contract Pool2 is ERC20 {
+    using SafeERC20 for IERC20;
+
     IERC20 public tokenA;
     IERC20 public tokenB;
-    IERC20 public lpToken;
     address public aiAddress;
+    uint256 public constant FEE_RATE = 30; // 0.3%
 
-    uint256 public reserveA;
-    uint256 public reserveB;
-
-    uint256 public constant FEE_PERCENTAGE = 3; // 0.3%
-    uint256 public constant FEE_DENOMINATOR = 1000;
-
-    constructor(
-        address _tokenA,
-        address _tokenB,
-        address _lpToken,
-        address _aiAddress
-    ) Ownable(msg.sender) {
+    constructor(address _tokenA, address _tokenB, address _aiAddress) ERC20("Liquidity Provider Token 2", "LP_2") {
         tokenA = IERC20(_tokenA);
         tokenB = IERC20(_tokenB);
-        lpToken = IERC20(_lpToken);
         aiAddress = _aiAddress;
 
-        reserveA = 1000 * 10**18;
-        reserveB = 5000 * 10**18;
-
-        tokenA.transferFrom(msg.sender, address(this), reserveA);
-        tokenB.transferFrom(msg.sender, address(this), reserveB);
+        // Initial reserves
+        tokenA.safeTransferFrom(msg.sender, address(this), 1000 * 10**decimals());
+        tokenB.safeTransferFrom(msg.sender, address(this), 5000 * 10**decimals());
     }
 
-    modifier onlyAIorUser(address user) {
-        require(msg.sender == aiAddress || msg.sender == user, "Not authorized");
-        _;
+    function swap(uint256 amountIn, address fromToken, address toToken) external {
+        require(fromToken == address(tokenA) || fromToken == address(tokenB), "Invalid fromToken");
+        require(toToken == address(tokenA) || toToken == address(tokenB), "Invalid toToken");
+
+        // Transfer the amount from sender to pool
+        IERC20(fromToken).safeTransferFrom(msg.sender, address(this), amountIn);
+
+        uint256 amountOut = getAmountOut(amountIn, fromToken, toToken);
+
+        // Take the fee and update reserves
+        uint256 fee = (amountOut * FEE_RATE) / 10000;
+        uint256 amountOutAfterFee = amountOut - fee;
+
+        // Transfer the amount out to sender
+        IERC20(toToken).safeTransfer(msg.sender, amountOutAfterFee);
     }
 
-    function swapAForB(uint256 amountA, address user) external onlyAIorUser(user) {
-        uint256 amountB = getAmountOut(amountA, reserveA, reserveB);
-        uint256 fee = (amountB * FEE_PERCENTAGE) / FEE_DENOMINATOR;
-
-        reserveA += amountA;
-        reserveB -= (amountB - fee);
-
-        tokenA.transferFrom(user, address(this), amountA);
-        tokenB.transfer(user, amountB - fee);
+    function getAmountOut(uint256 amountIn, address fromToken, address toToken) public view returns (uint256) {
+        uint256 reserveFrom = IERC20(fromToken).balanceOf(address(this));
+        uint256 reserveTo = IERC20(toToken).balanceOf(address(this));
+        uint256 amountInWithFee = amountIn * (10000 - FEE_RATE) / 10000;
+        return (amountInWithFee * reserveTo) / (reserveFrom + amountInWithFee);
     }
 
-    function swapBForA(uint256 amountB, address user) external onlyAIorUser(user) {
-        uint256 amountA = getAmountOut(amountB, reserveB, reserveA);
-        uint256 fee = (amountA * FEE_PERCENTAGE) / FEE_DENOMINATOR;
-
-        reserveB += amountB;
-        reserveA -= (amountA - fee);
-
-        tokenB.transferFrom(user, address(this), amountB);
-        tokenA.transfer(user, amountA - fee);
+    function addLiquidity(uint256 amountA, uint256 amountB) external {
+        tokenA.safeTransferFrom(msg.sender, address(this), amountA);
+        tokenB.safeTransferFrom(msg.sender, address(this), amountB);
+        _mint(msg.sender, amountA + amountB);
     }
 
-    function getAmountOut(uint256 amountIn, uint256 reserveIn, uint256 reserveOut) internal pure returns (uint256) {
-        uint256 amountInWithFee = amountIn * (FEE_DENOMINATOR - FEE_PERCENTAGE);
-        return (amountInWithFee * reserveOut) / (reserveIn * FEE_DENOMINATOR + amountInWithFee);
-    }
-
-    function addLiquidity(uint256 amountA, uint256 amountB, address user) external onlyAIorUser(user) {
-        reserveA += amountA;
-        reserveB += amountB;
-
-        tokenA.transferFrom(user, address(this), amountA);
-        tokenB.transferFrom(user, address(this), amountB);
-
-        uint256 lpAmount = (amountA + amountB) / 2; // Simplified calculation for LP tokens
-        lpToken.transfer(user, lpAmount);
+    function removeLiquidity(uint256 liquidity) external {
+        _burn(msg.sender, liquidity);
+        uint256 amountA = (liquidity * tokenA.balanceOf(address(this))) / totalSupply();
+        uint256 amountB = (liquidity * tokenB.balanceOf(address(this))) / totalSupply();
+        tokenA.safeTransfer(msg.sender, amountA);
+        tokenB.safeTransfer(msg.sender, amountB);
     }
 }
